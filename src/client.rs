@@ -1,3 +1,5 @@
+mod common;
+
 use std::net::TcpStream;
 use std::io::{self, BufReader, BufRead, BufWriter, Write};
 use std::thread;
@@ -34,7 +36,10 @@ fn main() {
     let mut line = String::new();
     io::stdin().read_line(&mut line).expect("Failed to read line");
 
-    writer.write(line.as_bytes()).expect("Could not write line to stream");
+    let message = common::packet::PacketType::Message(line);
+    let serialized = common::packet::serialize(message);
+
+    writer.write(&serialized[..]).expect("Could not write line to stream");
     writer.flush().expect("Could not flush");
   }
 }

@@ -1,6 +1,8 @@
+mod common;
+
 //use std::sync::mpsc;
 use std::thread;
-use std::io::{BufReader, BufWriter, Write, BufRead};
+use std::io::{BufReader, BufWriter, Write, BufRead, Read};
 use std::net::{TcpListener, TcpStream};
 
 fn handle_new_connection(stream: TcpStream) {
@@ -14,15 +16,16 @@ fn handle_new_connection(stream: TcpStream) {
 
     // Loop and wait for the connection's messages.    
     loop {
-      let mut line = String::new();
-      let result = reader.read_line(&mut line);
-      match result {
-        Ok(_) => (),
-        Err(e) => panic!("Could not read to string {}", e),
-      }
+      let mut buf: Vec<u8> = vec![0; common::packet::HEADER_SIZE as usize];
+      let result = reader.read_exact(&mut buf).expect("Could not read header!");
+      let header = common::packet::deserialize_header(buf);
 
-      if line.len() > 0 {
-        print!("Received from connection: {}", line);
+      let mut buf: Vec<u8> = vec![0; header.packet_size as usize];
+      let content_result = reader.read_exact(&mut buf).expect("Could not read content!");
+      let packet = common::packet::deserialize(header, buf);
+
+      if let common::packet::PacketType::Message(msg) = packet {
+        print!("Received from connection: {}", msg);
       }
     }
   });
