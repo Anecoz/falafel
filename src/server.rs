@@ -2,30 +2,56 @@ mod common;
 
 //use std::sync::mpsc;
 use std::thread;
-use std::io::{BufReader, BufWriter, Write, BufRead, Read};
+use std::io::{self, BufReader, BufWriter, Read};
 use std::net::{TcpListener, TcpStream};
+
+fn read_packet(reader: &mut BufReader<&TcpStream>) -> Result<common::packet::PacketType, io::Error> {
+  let mut buf: Vec<u8> = vec![0; common::packet::HEADER_SIZE as usize];
+  match reader.read_exact(&mut buf) {
+    Ok(_) => (),
+    Err(e) => return Err(e),
+  }
+  let header = common::packet::deserialize_header(buf);
+
+  let mut buf: Vec<u8> = vec![0; header.packet_size as usize];
+  match reader.read_exact(&mut buf) {
+    Ok(_) => (),
+    Err(e) => return Err(e),
+  }
+  Ok(common::packet::deserialize(header, buf))
+}
 
 fn handle_new_connection(stream: TcpStream) {
   thread::spawn(move || {
     let mut reader = BufReader::new(&stream);
-    let mut writer = BufWriter::new(&stream);
+    let mut _writer = BufWriter::new(&stream);
 
-    // Greet the new connection with a welcome message.
-    writer.write(b"Welcome to Uganda, friend!\n").expect("Could not write!");
-    writer.flush().expect("Could not flush!");
+    // Expect a connection message to be received.
+    let packet = match read_packet(&mut reader) {
+      Ok(packet) => packet,
+      Err(_) => {
+        println!("Dropping connection immediately, could not read connection header.");
+        return;
+      },
+    };
+    let mut connection_name = String::from("unknown");
 
-    // Loop and wait for the connection's messages.    
+    if let common::packet::PacketType::Connection(name) = packet {
+      println!("Received new connection: {}", name);
+      connection_name = name;
+    }
+   
     loop {
-      let mut buf: Vec<u8> = vec![0; common::packet::HEADER_SIZE as usize];
-      let result = reader.read_exact(&mut buf).expect("Could not read header!");
-      let header = common::packet::deserialize_header(buf);
-
-      let mut buf: Vec<u8> = vec![0; header.packet_size as usize];
-      let content_result = reader.read_exact(&mut buf).expect("Could not read content!");
-      let packet = common::packet::deserialize(header, buf);
+      let packet = match read_packet(&mut reader) {
+        Ok(packet) => packet,
+        Err(_) => {
+          println!("{} disconnected.", connection_name);
+          break;
+        },
+      };
 
       if let common::packet::PacketType::Message(msg) = packet {
-        print!("Received from connection: {}", msg);
+        println!("Received from {}: {}", connection_name, msg);
       }
     }
   });
@@ -42,7 +68,6 @@ fn main() {
   for stream in listener.incoming() {
     match stream {
       Ok(stream) => {
-        println!("Received new connection.");
         handle_new_connection(stream);
       },
       Err(e) => panic!("Received error while accepting connections: {}", e),

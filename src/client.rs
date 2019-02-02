@@ -27,6 +27,19 @@ fn main() {
     Err(e) => panic!("Could not connect: {}", e),
   };
 
+  // Start with sending a connection packet.
+  {
+    print!("Enter name: ");
+    std::io::stdout().flush();
+    let mut name = String::new();
+    io::stdin().read_line(&mut name).expect("Failed to read name");
+
+    let mut writer = BufWriter::new(&stream);
+    let packet = common::packet::PacketType::Connection(name.trim().to_string());
+    let serialized = common::packet::serialize(packet);
+    writer.write(&serialized[..]);
+  }
+
   handle_receiving(stream.try_clone().expect("Could not clone stream"));
 
   println!("Connected.");
@@ -36,10 +49,12 @@ fn main() {
     let mut line = String::new();
     io::stdin().read_line(&mut line).expect("Failed to read line");
 
-    let message = common::packet::PacketType::Message(line);
-    let serialized = common::packet::serialize(message);
+    if line.len() > 0 {
+      let message = common::packet::PacketType::Message(line.trim().to_string());
+      let serialized = common::packet::serialize(message);
 
-    writer.write(&serialized[..]).expect("Could not write line to stream");
-    writer.flush().expect("Could not flush");
+      writer.write(&serialized[..]).expect("Could not write line to stream");
+      writer.flush().expect("Could not flush");
+    }    
   }
 }
